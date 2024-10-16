@@ -7,21 +7,22 @@ from dataset import coco_dataset
 from unets import UNet, UNetSmall
 import wandb
 from utils import CosineWarmupScheduler
-
+from model import Scale_Model
 import matplotlib.pyplot as plt
 from config import *
 
 
 if __name__ == '__main__':
     #load an image segementation model for the coco dataset
-    model = UNetSmall(im_size, 3, num_classes)
+    model = UNetSmall(im_size, input_channels, num_classes)
+   # model = Scale_Model()
     model = model.to(device)
     #load coco dataset
     coco = coco_dataset()
-    train_dataloader = torch.utils.data.DataLoader(coco, batch_size=8, shuffle=True, num_workers=4)
+    train_dataloader = torch.utils.data.DataLoader(coco, batch_size=batch_size, shuffle=True, num_workers=4)
     
     coco_val = coco_dataset(train=False)
-    val_dataloader = torch.utils.data.DataLoader(coco_val, batch_size=8, shuffle=False, num_workers=4)
+    val_dataloader = torch.utils.data.DataLoader(coco_val, batch_size=batch_size, shuffle=False, num_workers=4)
     #train the model
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
@@ -53,7 +54,6 @@ if __name__ == '__main__':
                     plt.subplot(1,3,3)
                     plt.imshow(preds[0].cpu().detach().numpy())
                     plt.savefig("figures/output"+str(step)+".png")
-                    #compute iou score for all classes
                     wandb.log({"accuracy": acc.item(),"loss": loss.item(), "lr": scheduler.get_lr()[0],"image":wandb.Image("figures/output"+str(step)+".png")})
                 else:
                     wandb.log({"accuracy": acc.item(),"loss": loss.item(), "lr": scheduler.get_lr()[0]})
