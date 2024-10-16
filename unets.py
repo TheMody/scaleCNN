@@ -823,6 +823,8 @@ def UNetSmall(
         channel_mult = (1, 1, 2, 3, 4)
     elif image_size == 64:
         channel_mult = (1, 2, 3, 4)
+    elif image_size == 256:
+        channel_mult = (1, 1, 1, 2, 3, 4)
     elif image_size == 32:
         channel_mult = (1, 2, 2, 2)
     elif image_size == 28:
@@ -839,7 +841,6 @@ def UNetSmall(
         attention_ds.append(image_size // int(res))
 
     return UNetModel(
-        image_size=image_size,
         in_channels=in_channels,
         model_channels=base_width,
         out_channels=out_channels,

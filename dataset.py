@@ -1,11 +1,11 @@
 
-import torchvision
 from torchvision.transforms import v2
 import torch
 from pycocotools.coco import COCO
 from PIL import Image
 import os
 import matplotlib.pyplot as plt 
+from config import *
 
 class coco_dataset(torch.utils.data.Dataset):
     def __init__(self, train=True):
@@ -38,12 +38,12 @@ class coco_dataset(torch.utils.data.Dataset):
         image = v2.PILToTensor()(image)
 
         #center crop both images equally
-        image = v2.CenterCrop((256, 256))(image)
-        mask = v2.CenterCrop((256, 256))(mask)
+        image = v2.CenterCrop((im_size, im_size))(image)
+        mask = v2.CenterCrop((im_size, im_size))(mask)
         mask = v2.ToDtype(torch.int64)(mask)
         #normalize image
         image = v2.ToDtype(torch.float32, scale=True)(image)
-        image = v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])(image)
+        image = v2.Normalize(mean=mean, std=std)(image)
         return image, mask
     
 if __name__ == '__main__':

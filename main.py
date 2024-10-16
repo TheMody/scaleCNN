@@ -2,21 +2,19 @@
 
 import torch
 import numpy as np
-import torchvision
-from torchvision.transforms import v2
 from tqdm import tqdm
 from dataset import coco_dataset
-from unets import UNet
+from unets import UNet, UNetSmall
 import wandb
 from utils import CosineWarmupScheduler
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+import matplotlib.pyplot as plt
+from config import *
 
 
 if __name__ == '__main__':
     #load an image segementation model for the coco dataset
-    max_epochs = 10
-    lr = 5e-4
-    model = UNet(256, 3, 91)
+    model = UNetSmall(im_size, 3, num_classes)
     model = model.to(device)
     #load coco dataset
     coco = coco_dataset()
@@ -43,12 +41,22 @@ if __name__ == '__main__':
             loss.backward()
             optimizer.step()
             scheduler.step()
-            pbar.set_postfix(loss=loss.item())
-            _, preds = torch.max(outputs, 1)
-            acc = (preds == targets).float().mean()
-            wandb.log({"accuracy": acc.item(),"loss": loss.item(), "lr": scheduler.get_lr()[0]})
-         #   if step % 100 == 0:
-                #compute iou score for all classes
+            with torch.no_grad():
+                pbar.set_postfix(loss=loss.item())
+                _, preds = torch.max(outputs, 1)
+                acc = (preds == targets).float().mean()
+                if step % log_step == 0:
+                    plt.subplot(1,3,1)
+                    plt.imshow(np.clip(images[0].permute(1,2,0).cpu().detach().numpy()*std + mean,0,1))
+                    plt.subplot(1,3,2)
+                    plt.imshow(targets[0].cpu().detach().numpy())
+                    plt.subplot(1,3,3)
+                    plt.imshow(preds[0].cpu().detach().numpy())
+                    plt.savefig("figures/output"+str(step)+".png")
+                    #compute iou score for all classes
+                    wandb.log({"accuracy": acc.item(),"loss": loss.item(), "lr": scheduler.get_lr()[0],"image":wandb.Image("figures/output"+str(step)+".png")})
+                else:
+                    wandb.log({"accuracy": acc.item(),"loss": loss.item(), "lr": scheduler.get_lr()[0]})
 
         
         #validate the model
