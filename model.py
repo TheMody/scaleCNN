@@ -43,27 +43,50 @@ def differentiable_interpolate(x, scale_factors):
 
     return y
 
+def image_to_patches(image, patch_size):
+    # Reshape image: (batch_size, channels, height, width) -> (batch_size, patches, patch_size * patch_size * channels)
+    batch_size, channels, height, width = image.shape
+    patches = image.unfold(2, patch_size, patch_size).unfold(3, patch_size, patch_size)
+    patches = patches.contiguous().view(batch_size, channels, -1, patch_size, patch_size)
+    patches = patches.permute(0, 2, 3, 4, 1).contiguous().view(batch_size, -1, patch_size * patch_size * channels)
+    return patches
+
 class Scale_Model(torch.nn.Module):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.model = UNetSmall(im_size, input_channels, num_classes)
-        self.scale_model = torch.nn.Sequential(torch.nn.Conv2d(input_channels, 64, 5), torch.nn.ReLU(),torch.nn.Conv2d(64, 64, 5),torch.nn.ReLU())
-        self.linear_scale = torch.nn.Linear(64, 1)
+        if scale_model == "transformer":
+            self.patch_size = 16
+            self.cls_token = torch.nn.Parameter(torch.randn(1, 1, hidden_dim))
+            self.patch_embeddings = torch.nn.Linear(input_channels * self.patch_size ** 2, hidden_dim)
+            self.scale_model = torch.nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=2,dim_feedforward=4*hidden_dim, batch_first=True, activation='gelu') 
+        if scale_model == "cnn":
+            self.scale_model = torch.nn.Sequential(torch.nn.Conv2d(input_channels, hidden_dim, kernel_size), torch.nn.ReLU(),torch.nn.Conv2d(hidden_dim, hidden_dim, kernel_size),torch.nn.ReLU())
+        self.linear_scale = torch.nn.Linear(hidden_dim, 1)
 
+    #x is (batchsize, channels, height, width)
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         input = x
-        x = self.scale_model(x)
-        x = torch.sum(x, dim=(2, 3)) / (x.shape[2] * x.shape[3])
+        if scale_model == "cnn":
+            x = self.scale_model(x)
+            x = torch.sum(x, dim=(2, 3)) / (x.shape[2] * x.shape[3])
+        if scale_model == "transformer":
+            # x is (batchsize, channels, height, width)
+            x = image_to_patches(x, self.patch_size)
+            x = self.patch_embeddings(x)
+            #add the cls token
+            x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
+            x = self.scale_model(x)[:,0]
+
         x = torch.nn.functional.sigmoid(self.linear_scale(x))*3 + 16/im_size
-        #x = torch.clip(x, 16/im_size, 3)
+
         # x is (batchsize, scale) = (1,1)
         input = differentiable_interpolate(input, torch.cat((x,x), dim = 1)[0])
         self.scale_factor = x[0]
-        #input= torch.nn.functional.interpolate(input, size=(int(im_size*x[0]),int(im_size*x[0])))
-        #input = torch.nn.Upsample(scale_factor=x)(input)
-        #pad input to length divisble by 2^4 
+        #pad input to length divisble by 2^4 needed fpr unet
         pad = 2**4 - (input.shape[2] % 2**4)
         input = torch.nn.functional.pad(input, (0, pad, 0, pad))
+
         x = self.model(input)
         x= torch.nn.functional.interpolate(x, size=(im_size,im_size), mode = "bilinear")
         return x
@@ -97,6 +120,8 @@ if __name__ == '__main__':
 
     #scale = torch.tensor((scale,scale), requires_grad=True)
     x = torch.randn(1,3,256,256, requires_grad=True)
+    # scaler = torch.nn.Upsample(scale_factor=scale[0])
+    # y = scaler(x)
     y = differentiable_interpolate(x,scale_factors=scale)
     L  = y.sum()
     L.backward()

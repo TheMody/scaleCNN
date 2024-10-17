@@ -64,7 +64,7 @@ if __name__ == '__main__':
                     plt.savefig("figures/output"+str(step)+".png")
                     wandb.log({"accuracy": acc.item(),"loss": avg_loss, "lr": scheduler.get_lr()[0],"image":wandb.Image("figures/output"+str(step)+".png"), "scale_factor": model.scale_factor.item()})
                 else:
-                    wandb.log({"accuracy": acc.item(),"loss": avg_loss, "lr": scheduler.get_lr()[0]})
+                    wandb.log({"accuracy": acc.item(),"loss": avg_loss, "lr": scheduler.get_lr()[0], "scale_factor": model.scale_factor.item()})
 
         
         #validate the model
