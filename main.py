@@ -14,8 +14,8 @@ from config import *
 
 if __name__ == '__main__':
     #load an image segementation model for the coco dataset
-    model = UNetSmall(im_size, input_channels, num_classes)
-   # model = Scale_Model()
+    #model = UNetSmall(im_size, input_channels, num_classes)
+    model = Scale_Model()
     model = model.to(device)
     #load coco dataset
     coco = coco_dataset()
@@ -27,23 +27,31 @@ if __name__ == '__main__':
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
     scheduler = CosineWarmupScheduler(optimizer, warmup=100, max_iters=max_epochs*len(train_dataloader))
-    wandb.init(project="image_segmentation_scalefree")
+    wandb.init(project="image_segmentation_scalefree", config=config)
 
     step = 0
     for epoch in range(max_epochs):
         model.train()
-        for images, targets in (pbar := tqdm(train_dataloader)):
+        trainset = iter(train_dataloader)
+        for i in (pbar := tqdm(range(len(train_dataloader)//microbatch_size))):
             step += 1
-            images = images.to(device)
-            targets = targets.to(device)
             optimizer.zero_grad()
-            outputs = model(images)
-            loss = torch.nn.functional.cross_entropy(outputs, targets)
-            loss.backward()
+            avg_loss = 0
+            for _ in range(microbatch_size):
+                images, targets = next(trainset)
+                images = images.to(device)
+                targets = targets.to(device)
+                outputs = model(images)
+                loss = torch.nn.functional.cross_entropy(outputs, targets) / microbatch_size
+                loss.backward()
+                avg_loss += loss.item()
+
+            #add gradient clipping
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.25)
             optimizer.step()
             scheduler.step()
             with torch.no_grad():
-                pbar.set_postfix(loss=loss.item())
+                pbar.set_postfix(loss=avg_loss)
                 _, preds = torch.max(outputs, 1)
                 acc = (preds == targets).float().mean()
                 if step % log_step == 0:
@@ -54,9 +62,9 @@ if __name__ == '__main__':
                     plt.subplot(1,3,3)
                     plt.imshow(preds[0].cpu().detach().numpy())
                     plt.savefig("figures/output"+str(step)+".png")
-                    wandb.log({"accuracy": acc.item(),"loss": loss.item(), "lr": scheduler.get_lr()[0],"image":wandb.Image("figures/output"+str(step)+".png")})
+                    wandb.log({"accuracy": acc.item(),"loss": avg_loss, "lr": scheduler.get_lr()[0],"image":wandb.Image("figures/output"+str(step)+".png"), "scale_factor": model.scale_factor.item()})
                 else:
-                    wandb.log({"accuracy": acc.item(),"loss": loss.item(), "lr": scheduler.get_lr()[0]})
+                    wandb.log({"accuracy": acc.item(),"loss": avg_loss, "lr": scheduler.get_lr()[0]})
 
         
         #validate the model
