@@ -26,7 +26,7 @@ if __name__ == '__main__':
     #train the model
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
 
-    scheduler = CosineWarmupScheduler(optimizer, warmup=100, max_iters=max_epochs*len(train_dataloader))
+    scheduler = CosineWarmupScheduler(optimizer, warmup=100, max_iters=float(max_epochs*(len(train_dataloader)//microbatch_size)))
     wandb.init(project="image_segmentation_scalefree", config=config)
 
     step = 0
@@ -42,7 +42,9 @@ if __name__ == '__main__':
                 images = images.to(device)
                 targets = targets.to(device)
                 outputs = model(images)
-                loss = torch.nn.functional.cross_entropy(outputs, targets) / microbatch_size
+                loss = torch.nn.functional.cross_entropy(outputs, targets) 
+                loss += (model.scale_factor * scale_factor_loss_factor).mean()
+                loss = loss / microbatch_size
                 loss.backward()
                 avg_loss += loss.item()
 
