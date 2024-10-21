@@ -14,8 +14,9 @@ input_channels = 3
 hidden_dim = 64
 kernel_size = 5
 scale_factor_loss_factor = 1e-2
-
+Baseline = False
 scale_model =  "transformer"#"cnn"#
+
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-config = {"mean":mean, "std":std, "lr":lr, "max_epochs":max_epochs, "batch_size":batch_size, "num_classes":num_classes, "im_size":im_size, "log_step":log_step, "input_channels":input_channels, "device":device}
+config = {"mean":mean, "std":std, "lr":lr, "max_epochs":max_epochs, "batch_size":batch_size, "num_classes":num_classes, "im_size":im_size, "log_step":log_step, "input_channels":input_channels, "device":device, "hidden_dim":hidden_dim, "kernel_size":kernel_size, "scale_factor_loss_factor":scale_factor_loss_factor, "Baseline":Baseline, "scale_model":scale_model}
