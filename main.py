@@ -46,7 +46,7 @@ if __name__ == '__main__':
                 targets = targets.to(device)
                 outputs = model(images)
                 loss = torch.nn.functional.cross_entropy(outputs, targets) 
-                if Baseline:
+                if not Baseline:
                     loss += (model.scale_factor * scale_factor_loss_factor).mean()
                 loss = loss / microbatch_size
                 loss.backward()
