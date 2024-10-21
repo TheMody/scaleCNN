@@ -13,7 +13,7 @@ log_step = 100
 input_channels = 3
 hidden_dim = 64
 kernel_size = 5
-scale_factor_loss_factor = 1e-2
+scale_factor_loss_factor = 1e-1
 
 scale_model =  "transformer"#"cnn"#
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
