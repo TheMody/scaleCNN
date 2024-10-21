@@ -68,7 +68,8 @@ if __name__ == '__main__':
                     plt.subplot(1,3,3)
                     plt.imshow(preds[0].cpu().detach().numpy())
                     plt.savefig("figures/output"+str(step)+".png")
-                    wandb.log({"accuracy": acc.item(),"loss": avg_loss, "lr": scheduler.get_lr()[0],"image":wandb.Image("figures/output"+str(step)+".png"), "scale_factor": model.scale_factor.item()})
+                    if not Baseline:
+                        wandb.log({"accuracy": acc.item(),"loss": avg_loss, "lr": scheduler.get_lr()[0],"image":wandb.Image("figures/output"+str(step)+".png"), "scale_factor": model.scale_factor.item()})
                 else:
                     wandb.log({"accuracy": acc.item(),"loss": avg_loss, "lr": scheduler.get_lr()[0], "scale_factor": model.scale_factor.item()})
 
