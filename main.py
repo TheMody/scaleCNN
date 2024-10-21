@@ -14,8 +14,10 @@ from config import *
 
 if __name__ == '__main__':
     #load an image segementation model for the coco dataset
-    #model = UNetSmall(im_size, input_channels, num_classes)
-    model = Scale_Model()
+    if Baseline:
+        model = UNetSmall(im_size, input_channels, num_classes)
+    else:
+        model = Scale_Model()
     model = model.to(device)
     #load coco dataset
     coco = coco_dataset()
@@ -28,7 +30,8 @@ if __name__ == '__main__':
 
     scheduler = CosineWarmupScheduler(optimizer, warmup=100, max_iters=float(max_epochs*(len(train_dataloader)//microbatch_size)))
     wandb.init(project="image_segmentation_scalefree", config=config)
-
+    
+    min_eval_loss = 1e10
     step = 0
     for epoch in range(max_epochs):
         model.train()
@@ -87,3 +90,6 @@ if __name__ == '__main__':
             mean_loss /= len(val_dataloader)
             wandb.log({"val_accuracy": mean_acc,"val_loss": mean_loss})
             print(f"Epoch: {epoch}, Val Accuracy: {mean_acc}, Val Loss: {mean_loss}")
+            if mean_loss < min_eval_loss:
+                torch.save(model.state_dict(), "model.pth")
+                min_eval_loss = mean_loss
