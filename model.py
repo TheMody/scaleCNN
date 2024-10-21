@@ -54,7 +54,7 @@ def image_to_patches(image, patch_size):
 class Scale_Model(torch.nn.Module):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.model = UNetSmall(im_size, input_channels, num_classes)
+        self.basemodel = UNetSmall(im_size, input_channels, num_classes)
         if scale_model == "transformer":
             self.patch_size = 16
             self.cls_token = torch.nn.Parameter(torch.randn(1, 1, hidden_dim))
@@ -66,6 +66,7 @@ class Scale_Model(torch.nn.Module):
 
     #x is (batchsize, channels, height, width)
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        #print(f"Before scale: {x.requires_grad}")
         input = x
         if scale_model == "cnn":
             x = self.scale_model(x)
@@ -79,7 +80,7 @@ class Scale_Model(torch.nn.Module):
             x = self.scale_model(x)[:,0]
 
         x = torch.nn.functional.sigmoid(self.linear_scale(x))*3 + 16/im_size
-
+        #print(f"Before interpolate: {x.requires_grad}")
         # x is (batchsize, scale) = (1,1)
         input = differentiable_interpolate(input, torch.cat((x,x), dim = 1)[0])
         self.scale_factor = x[0]
@@ -87,8 +88,11 @@ class Scale_Model(torch.nn.Module):
         pad = 2**4 - (input.shape[2] % 2**4)
         input = torch.nn.functional.pad(input, (0, pad, 0, pad))
 
-        x = self.model(input)
+        #print(f"Before unet: {x.requires_grad}")
+        x = self.basemodel(input)
+        #print(f"After unet: {x.requires_grad}")
         x= torch.nn.functional.interpolate(x, size=(im_size,im_size), mode = "bilinear")
+        #print(f"After scaling back: {x.requires_grad}")
         return x
     
 if __name__ == '__main__':  

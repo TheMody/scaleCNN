@@ -16,6 +16,7 @@ kernel_size = 5
 scale_factor_loss_factor = 1e-2
 Baseline = False
 scale_model =  "transformer"#"cnn"#
+pretrained = True
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
