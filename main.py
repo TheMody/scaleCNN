@@ -60,6 +60,9 @@ if __name__ == '__main__':
                 pbar.set_postfix(loss=avg_loss)
                 _, preds = torch.max(outputs, 1)
                 acc = (preds == targets).float().mean()
+                log_dict = {"accuracy": acc.item(),"loss": avg_loss, "lr": scheduler.get_lr()[0]}
+                if not Baseline:
+                    log_dict["scale_factor"] = model.scale_factor.mean().item()
                 if step % log_step == 0:
                     plt.subplot(1,3,1)
                     plt.imshow(np.clip(images[0].permute(1,2,0).cpu().detach().numpy()*std + mean,0,1))
@@ -68,10 +71,8 @@ if __name__ == '__main__':
                     plt.subplot(1,3,3)
                     plt.imshow(preds[0].cpu().detach().numpy())
                     plt.savefig("figures/output"+str(step)+".png")
-                    if not Baseline:
-                        wandb.log({"accuracy": acc.item(),"loss": avg_loss, "lr": scheduler.get_lr()[0],"image":wandb.Image("figures/output"+str(step)+".png"), "scale_factor": model.scale_factor.item()})
-                else:
-                    wandb.log({"accuracy": acc.item(),"loss": avg_loss, "lr": scheduler.get_lr()[0], "scale_factor": model.scale_factor.item()})
+                    log_dict["image"] = wandb.Image("figures/output"+str(step)+".png")
+                wandb.log(log_dict)
 
         
         #validate the model
