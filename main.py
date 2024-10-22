@@ -93,6 +93,6 @@ if __name__ == '__main__':
             mean_loss /= len(val_dataloader)
             wandb.log({"val_accuracy": mean_acc,"val_loss": mean_loss})
             print(f"Epoch: {epoch}, Val Accuracy: {mean_acc}, Val Loss: {mean_loss}")
-            if mean_loss < min_eval_loss:
+            if mean_loss < min_eval_loss and Baseline:
                 torch.save(model.state_dict(), "model.pth")
                 min_eval_loss = mean_loss
