@@ -18,7 +18,17 @@ if __name__ == '__main__':
         model = UNetSmall(im_size, input_channels, num_classes)
     else:
         model = Scale_Model()
-    model = model.to(device)
+        model = model.to(device)
+    if pretrained:
+        print("Loading pretrained model")
+        model.basemodel.load_state_dict(torch.load("pre_trained_model.pth", weights_only=True))
+       # print([name for name,param in model.named_parameters() if "basemodel" not in name])
+        optimizer = torch.optim.AdamW([param for name,param in model.named_parameters() if "basemodel" not in name], lr=lr)
+    else:
+        optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+
+    
+ 
     #load coco dataset
     coco = coco_dataset()
     train_dataloader = torch.utils.data.DataLoader(coco, batch_size=batch_size, shuffle=True, num_workers=4)
@@ -26,7 +36,7 @@ if __name__ == '__main__':
     coco_val = coco_dataset(train=False)
     val_dataloader = torch.utils.data.DataLoader(coco_val, batch_size=batch_size, shuffle=False, num_workers=4)
     #train the model
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    
 
     scheduler = CosineWarmupScheduler(optimizer, warmup=100, max_iters=float(max_epochs*(len(train_dataloader)//microbatch_size)))
     wandb.init(project="image_segmentation_scalefree", config=config)
@@ -42,7 +52,7 @@ if __name__ == '__main__':
             avg_loss = 0
             for _ in range(microbatch_size):
                 images, targets = next(trainset)
-                images = images.to(device)
+                images = images.to(device).requires_grad_()
                 targets = targets.to(device)
                 outputs = model(images)
                 loss = torch.nn.functional.cross_entropy(outputs, targets) 
