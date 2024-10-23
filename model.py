@@ -67,6 +67,7 @@ class Scale_Model(torch.nn.Module):
     #x is (batchsize, channels, height, width)
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         #print(f"Before scale: {x.requires_grad}")
+        init_shapes = x.shape
         input = x
         if scale_model == "cnn":
             x = self.scale_model(x)
@@ -84,14 +85,17 @@ class Scale_Model(torch.nn.Module):
         # x is (batchsize, scale) = (1,1)
         input = differentiable_interpolate(input, torch.cat((x,x), dim = 1)[0])
         self.scale_factor = x[0]
+
+
         #pad input to length divisble by 2^4 needed fpr unet
         pad = 2**4 - (input.shape[2] % 2**4)
         input = torch.nn.functional.pad(input, (0, pad, 0, pad))
+        
 
         #print(f"Before unet: {x.requires_grad}")
         x = self.basemodel(input)
         #print(f"After unet: {x.requires_grad}")
-        x= torch.nn.functional.interpolate(x, size=(im_size,im_size), mode = "bilinear")
+        x= torch.nn.functional.interpolate(x, size=(init_shapes[2],init_shapes[3]), mode = "bilinear")
         #print(f"After scaling back: {x.requires_grad}")
         return x
     

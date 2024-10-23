@@ -1,9 +1,12 @@
 
+import os 
+
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'expandable_segments:True'
 
 import torch
 import numpy as np
 from tqdm import tqdm
-from dataset import coco_dataset
+from dataset import coco_dataset,coco_ds_filtered
 from unets import UNet, UNetSmall
 import wandb
 from utils import CosineWarmupScheduler
@@ -18,22 +21,24 @@ if __name__ == '__main__':
         model = UNetSmall(im_size, input_channels, num_classes)
     else:
         model = Scale_Model()
-        model = model.to(device)
-    if pretrained:
+    model = model.to(device)
+    if pretrained and not Baseline:
         print("Loading pretrained model")
-        model.basemodel.load_state_dict(torch.load("pre_trained_model.pth", weights_only=True))
-       # print([name for name,param in model.named_parameters() if "basemodel" not in name])
+        model.basemodel.load_state_dict(torch.load(load_model_path, weights_only=True))
+    # print([name for name,param in model.named_parameters() if "basemodel" not in name])
         optimizer = torch.optim.AdamW([param for name,param in model.named_parameters() if "basemodel" not in name], lr=lr)
     else:
         optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
-
+    
     
  
     #load coco dataset
-    coco = coco_dataset()
+    #coco = coco_dataset()
+    coco = coco_ds_filtered(train=True, filtered_ids=[35], scaled=data_is_scaled)
     train_dataloader = torch.utils.data.DataLoader(coco, batch_size=batch_size, shuffle=True, num_workers=4)
     
-    coco_val = coco_dataset(train=False)
+    #coco_val = coco_dataset(train=False)
+    coco_val = coco_ds_filtered(train=False, filtered_ids=[35], scaled=data_is_scaled)
     val_dataloader = torch.utils.data.DataLoader(coco_val, batch_size=batch_size, shuffle=False, num_workers=4)
     #train the model
     
@@ -43,6 +48,7 @@ if __name__ == '__main__':
     
     min_eval_loss = 1e10
     step = 0
+    
     for epoch in range(max_epochs):
         model.train()
         trainset = iter(train_dataloader)
@@ -74,13 +80,16 @@ if __name__ == '__main__':
                 if not Baseline:
                     log_dict["scale_factor"] = model.scale_factor.mean().item()
                 if step % log_step == 0:
-                    plt.subplot(1,3,1)
+                    plt.subplot(1,4,1)
                     plt.imshow(np.clip(images[0].permute(1,2,0).cpu().detach().numpy()*std + mean,0,1))
-                    plt.subplot(1,3,2)
+                    plt.subplot(1,4,2)
                     plt.imshow(targets[0].cpu().detach().numpy())
-                    plt.subplot(1,3,3)
-                    plt.imshow(preds[0].cpu().detach().numpy())
+                    plt.subplot(1,4,3)
+                    plt.imshow(preds[0].long().cpu().detach().numpy())
+                    plt.subplot(1,4,4)
+                    plt.imshow((preds == targets)[0].float().cpu().detach().numpy())
                     plt.savefig("figures/output"+str(step)+".png")
+                    plt.close()
                     log_dict["image"] = wandb.Image("figures/output"+str(step)+".png")
                 wandb.log(log_dict)
 
@@ -90,19 +99,52 @@ if __name__ == '__main__':
         with torch.no_grad():
             mean_acc = 0
             mean_loss = 0
+            all_scale_factors = []
+            ious = []
             for images, targets in val_dataloader:
                 images = images.to(device)
                 targets = targets.to(device)
                 outputs = model(images)
                 loss = torch.nn.functional.cross_entropy(outputs, targets)
                 _, preds = torch.max(outputs, 1)
+
+                #calculate ious
+                iou = []
+                for cls in range(num_classes):
+                    intersection = ((preds.cpu() == cls) & (targets.cpu() == cls)).float().sum()
+                    union = ((preds.cpu() == cls) | (targets.cpu() == cls)).float().sum()
+                    iou.append((intersection + 1e-6) / (union + 1e-6))
+                ious.append(np.asarray(iou))
+
+                #calculate accuracies
                 acc = (preds == targets).float().mean()
                 mean_acc += acc.item()
                 mean_loss += loss.item()
+                if not Baseline:
+                    all_scale_factors.append(model.scale_factor)
             mean_acc /= len(val_dataloader)
             mean_loss /= len(val_dataloader)
-            wandb.log({"val_accuracy": mean_acc,"val_loss": mean_loss})
+            log_dict = {"val_accuracy": mean_acc,"val_loss": mean_loss}
+
+            #plot ious
+            ious = np.mean(np.asarray(ious), axis=0)
+            plt.bar(range(num_classes), ious)
+            plt.ylabel("IoU")
+            plt.xlabel("Class ID")
+            plt.savefig("figures/ious_eval"+str(epoch)+".png")
+            plt.close()
+            log_dict["ious"] = wandb.Image("figures/ious_eval"+str(epoch)+".png")
+
+            if not Baseline:
+                #create a histogramm of all scales
+                all_scale_factors = torch.cat(all_scale_factors)
+                plt.hist(all_scale_factors.cpu().detach().numpy())
+                plt.savefig("figures/scale_hist"+str(epoch)+".png")
+                plt.close()
+                log_dict["scale_hist"] = wandb.Image("figures/scale_hist"+str(epoch)+".png")
+            wandb.log(log_dict)
             print(f"Epoch: {epoch}, Val Accuracy: {mean_acc}, Val Loss: {mean_loss}")
             if mean_loss < min_eval_loss:
-                torch.save(model.state_dict(), "model.pth")
+                print("Saving model")
+                torch.save(model.state_dict(), save_model_path)
                 min_eval_loss = mean_loss
