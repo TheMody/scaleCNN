@@ -34,11 +34,11 @@ if __name__ == '__main__':
  
     #load coco dataset
     #coco = coco_dataset()
-    coco = coco_ds_filtered(train=True, filtered_ids=[35], scaled=data_is_scaled)
+    coco = coco_ds_filtered(train=True, filtered_ids=[filtered_ids], scaled=data_is_scaled)
     train_dataloader = torch.utils.data.DataLoader(coco, batch_size=batch_size, shuffle=True, num_workers=4)
     
     #coco_val = coco_dataset(train=False)
-    coco_val = coco_ds_filtered(train=False, filtered_ids=[35], scaled=data_is_scaled)
+    coco_val = coco_ds_filtered(train=False, filtered_ids=[filtered_ids], scaled=data_is_scaled)
     val_dataloader = torch.utils.data.DataLoader(coco_val, batch_size=batch_size, shuffle=False, num_workers=4)
     #train the model
     
@@ -79,6 +79,8 @@ if __name__ == '__main__':
                 log_dict = {"accuracy": acc.item(),"loss": avg_loss, "lr": scheduler.get_lr()[0]}
                 if not Baseline:
                     log_dict["scale_factor"] = model.scale_factor.mean().item()
+                    log_dict["scale_factor_loss"] = (model.scale_factor * scale_factor_loss_factor).mean().item()
+                    log_dict["rest_loss"] = torch.nn.functional.cross_entropy(outputs, targets).item()
                 if step % log_step == 0:
                     plt.subplot(1,4,1)
                     plt.imshow(np.clip(images[0].permute(1,2,0).cpu().detach().numpy()*std + mean,0,1))
@@ -128,6 +130,8 @@ if __name__ == '__main__':
 
             #plot ious
             ious = np.mean(np.asarray(ious), axis=0)
+            log_dict[str(filtered_ids)+ " iou"] = ious[filtered_ids]
+            log_dict["background iou"] = ious[0]
             plt.bar(range(num_classes), ious)
             plt.ylabel("IoU")
             plt.xlabel("Class ID")
