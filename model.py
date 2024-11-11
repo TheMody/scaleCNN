@@ -59,18 +59,19 @@ class Scale_Model(torch.nn.Module):
             self.patch_size = 16
             self.cls_token = torch.nn.Parameter(torch.randn(1, 1, hidden_dim))
             self.patch_embeddings = torch.nn.Linear(input_channels * self.patch_size ** 2, hidden_dim)
-            self.scale_model = torch.nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=2,dim_feedforward=4*hidden_dim, batch_first=True, activation='gelu') 
+            self.scale_model = torch.nn.Sequential(torch.nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=2,dim_feedforward=4*hidden_dim, batch_first=True, activation='gelu'),torch.nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=2,dim_feedforward=4*hidden_dim, batch_first=True, activation='gelu') )
         if scale_model == "cnn":
-            self.scale_model = torch.nn.Sequential(torch.nn.Conv2d(input_channels, hidden_dim, kernel_size), torch.nn.ReLU(),torch.nn.Conv2d(hidden_dim, hidden_dim, kernel_size),torch.nn.ReLU())
-        self.linear_scale = torch.nn.Linear(hidden_dim, 1)
+            self.scale_model = torch.nn.Sequential(torch.nn.Conv2d(input_channels, hidden_dim, kernel_size), torch.nn.GELU(),torch.nn.Conv2d(hidden_dim, hidden_dim, kernel_size),torch.nn.GELU())
+        self.linear_scale = torch.nn.Sequential(torch.nn.Linear(hidden_dim, hidden_dim),torch.nn.GELU(),torch.nn.Linear(hidden_dim, 1))
 
     #x is (batchsize, channels, height, width)
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         #print(f"Before scale: {x.requires_grad}")
+        init_shapes = x.shape
         input = x
         if scale_model == "cnn":
             x = self.scale_model(x)
-            x = torch.sum(x, dim=(2, 3)) / (x.shape[2] * x.shape[3])
+            x = torch.sum(x, dim=(2, 3)) #/ (x.shape[2] * x.shape[3])
         if scale_model == "transformer":
             # x is (batchsize, channels, height, width)
             x = image_to_patches(x, self.patch_size)
@@ -84,14 +85,25 @@ class Scale_Model(torch.nn.Module):
         # x is (batchsize, scale) = (1,1)
         input = differentiable_interpolate(input, torch.cat((x,x), dim = 1)[0])
         self.scale_factor = x[0]
+
+
+        if input.shape[2] > max_size or input.shape[3] > max_size:
+            scale = max_size / max(input.shape[2], input.shape[3])
+            input = torch.nn.functional.interpolate(input, scale_factor=scale)
+
         #pad input to length divisble by 2^4 needed fpr unet
+        shape_before_pad = input.shape
         pad = 2**4 - (input.shape[2] % 2**4)
         input = torch.nn.functional.pad(input, (0, pad, 0, pad))
+        
 
         #print(f"Before unet: {x.requires_grad}")
         x = self.basemodel(input)
+
+        #remove padding from output
+        x = x[:, :, :shape_before_pad[2], :shape_before_pad[3]]
         #print(f"After unet: {x.requires_grad}")
-        x= torch.nn.functional.interpolate(x, size=(im_size,im_size), mode = "bilinear")
+        x= torch.nn.functional.interpolate(x, size=(init_shapes[2],init_shapes[3]), mode = "bilinear")
         #print(f"After scaling back: {x.requires_grad}")
         return x
     

@@ -9,23 +9,23 @@ from config import *
 
 
 class coco_ds_filtered(torch.utils.data.Dataset):
-    def __init__(self,train,filtered_ids):
+    def __init__(self,train,filtered_ids, scaled):
         if train:
             self.coco = COCO('data/train/instances_train2017.json')
             self.img_dir = 'data/train/train2017/'
         else:
             self.coco = COCO('data/val/instances_val2017.json')
             self.img_dir = 'data/val/val2017/'
-        
+        self.scaled = scaled
         self.filtered_ids = filtered_ids
         self.cat_ids = self.coco.getCatIds()
         self.idx_to_id =[int(s.split(".jpg")[0]) for s in  os.listdir(self.img_dir)]
-        self.length = len(os.listdir(self.img_dir))
-
+        
         print("filtering imgs")
         cat_ids = self.coco.getImgIds(imgIds=self.idx_to_id,catIds=filtered_ids)
         #get the indices of the filtered images
         self.idx_to_id = [self.idx_to_id[i] for i in range(len(self.idx_to_id)) if self.idx_to_id[i] in cat_ids]
+        self.length = len(self.idx_to_id)
         print("finished filtering imgs")
 
     def __len__(self):
@@ -38,8 +38,6 @@ class coco_ds_filtered(torch.utils.data.Dataset):
         anns = self.coco.loadAnns(anns_ids)
         
         mask = torch.zeros((image.size[1], image.size[0]))
-        # for i in range(0,len(anns)):
-        #     mask = torch.max(mask,torch.Tensor(self.coco.annToMask(anns[i])*anns[i]['category_id']))
 
         #get the bounding box of the filtered category
         for id in self.filtered_ids:
@@ -56,23 +54,46 @@ class coco_ds_filtered(torch.utils.data.Dataset):
         image = image[:,int(bbox[1]):int(bbox[1]+bbox[3]),int(bbox[0]):int(bbox[0]+bbox[2])]
         mask = mask[int(bbox[1]):int(bbox[1]+bbox[3]),int(bbox[0]):int(bbox[0]+bbox[2])]
 
-        #resize image largest dim to im_size
-        if image.shape[1] > image.shape[2]:
-            mask = v2.Resize((im_size,im_size*image.shape[2]//image.shape[1]),interpolation=v2.InterpolationMode.NEAREST)(mask.unsqueeze(0)).squeeze(0)
-            image = v2.Resize((im_size,im_size*image.shape[2]//image.shape[1]))(image)
-            
-            #pad to im_size,im_size
-            pad = im_size - image.shape[2]
-            image = torch.nn.functional.pad(image, (0, pad, 0, 0))
-            mask = torch.nn.functional.pad(mask, (0, pad, 0, 0))
+        if self.scaled:
+            #resize image largest dim to im_size
+            if image.shape[1] > image.shape[2]:
+                mask = v2.Resize((im_size,im_size*image.shape[2]//image.shape[1]),interpolation=v2.InterpolationMode.NEAREST)(mask.unsqueeze(0)).squeeze(0)
+                image = v2.Resize((im_size,im_size*image.shape[2]//image.shape[1]))(image)
+                
+                #pad to im_size,im_size
+                pad = im_size - image.shape[2]
+                image = torch.nn.functional.pad(image, (0, pad, 0, 0))
+                mask = torch.nn.functional.pad(mask, (0, pad, 0, 0))
+            else:
+                mask = v2.Resize((im_size*image.shape[1]//image.shape[2],im_size),interpolation=v2.InterpolationMode.NEAREST)(mask.unsqueeze(0)).squeeze(0)
+                image = v2.Resize((im_size*image.shape[1]//image.shape[2],im_size))(image)
+                
+                #pad to im_size,im_size
+                pad = im_size - image.shape[1]
+                image = torch.nn.functional.pad(image, (0, 0, 0, pad))
+                mask = torch.nn.functional.pad(mask, (0, 0, 0, pad))
         else:
-            mask = v2.Resize((im_size*image.shape[1]//image.shape[2],im_size),interpolation=v2.InterpolationMode.NEAREST)(mask.unsqueeze(0)).squeeze(0)
-            image = v2.Resize((im_size*image.shape[1]//image.shape[2],im_size))(image)
-            
-            #pad to im_size,im_size
-            pad = im_size - image.shape[1]
-            image = torch.nn.functional.pad(image, (0, 0, 0, pad))
-            mask = torch.nn.functional.pad(mask, (0, 0, 0, pad))
+            if image.shape[2] > image.shape[1]:
+                #pad last dim
+                pad = 2**4 - (image.shape[2] % 2**4)
+                image = torch.nn.functional.pad(image, (0, pad, 0, pad))
+                mask = torch.nn.functional.pad(mask, (0, pad, 0, pad))
+                #pad second to last dim the same
+                pad = image.shape[2]-image.shape[1]
+                image = torch.nn.functional.pad(image, (0, 0, 0, pad))
+                mask = torch.nn.functional.pad(mask, (0, 0, 0, pad))
+            else:
+                #pad second to last dim
+                pad = 2**4 - (image.shape[1] % 2**4)
+                image = torch.nn.functional.pad(image, (0, 0, 0, pad))
+                mask = torch.nn.functional.pad(mask, (0, 0, 0, pad))
+
+                # #pad last dim to second to last dim
+                pad = image.shape[1]-image.shape[2]
+                image = torch.nn.functional.pad(image, (0, pad, 0, 0))
+                mask = torch.nn.functional.pad(mask, (0, pad, 0, 0))
+
+
 
         
         #center crop both images equally
@@ -124,9 +145,10 @@ class coco_dataset(torch.utils.data.Dataset):
         return image, mask
     
 if __name__ == '__main__':
-    coco = coco_ds_filtered(True,[35])
+    coco = coco_ds_filtered(False,[35],False)
     for i in range(100):
         img,mask = coco[i]
+        print(img.shape)
         #plot image and label side by side
         plt.subplot(1,2,1)
         plt.imshow(img.permute(1,2,0))
