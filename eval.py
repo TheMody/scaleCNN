@@ -54,6 +54,7 @@ def eval(Baseline):
         ious = np.mean(np.asarray(ious), axis=0)
         print("background iou:",ious[0])  
         print(str(filtered_ids)+" iou:",ious[filtered_ids])
+        wandb.log({str(filtered_ids)+" iou without scaling":ious[filtered_ids]})
         #do a barplot of all ious
         plt.bar(range(num_classes), ious)
         plt.ylabel("IoU")

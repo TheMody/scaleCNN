@@ -25,7 +25,7 @@ Baseline = False
 pretrained = True
 data_is_scaled = False 
 scale_model =  "transformer"#"cnn"#
-save_model_path = str(filtered_ids)+ "_model.pth"
+save_model_path = str(filtered_ids)+ "_model_saved.pth"
 load_model_path = str(filtered_ids)+"_model_saved.pth"
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
