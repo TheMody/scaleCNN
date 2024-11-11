@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from config import *
 
 
-if __name__ == '__main__':
+def train(Baseline, pretrained, data_is_scaled):
     #load an image segementation model for the coco dataset
     if Baseline:
         model = UNetSmall(im_size, input_channels, num_classes)
@@ -149,6 +149,8 @@ if __name__ == '__main__':
             wandb.log(log_dict)
             print(f"Epoch: {epoch}, Val Accuracy: {mean_acc}, Val Loss: {mean_loss}")
             if mean_loss < min_eval_loss and Baseline:
-                print("Saving model")
                 torch.save(model.state_dict(), save_model_path)
                 min_eval_loss = mean_loss
+
+if __name__ == '__main__':
+    train(Baseline=Baseline, pretrained=pretrained, data_is_scaled=data_is_scaled)
