@@ -50,7 +50,7 @@ with torch.no_grad():
 
     ious = np.mean(np.asarray(ious), axis=0)
     print("background iou:",ious[0])  
-    print("skier iou:",ious[35])
+    print(str(filtered_ids)+" iou:",ious[filtered_ids])
     #do a barplot of all ious
     plt.bar(range(num_classes), ious)
     plt.ylabel("IoU")

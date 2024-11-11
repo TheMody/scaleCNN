@@ -148,7 +148,7 @@ if __name__ == '__main__':
                 log_dict["scale_hist"] = wandb.Image("figures/scale_hist"+str(epoch)+".png")
             wandb.log(log_dict)
             print(f"Epoch: {epoch}, Val Accuracy: {mean_acc}, Val Loss: {mean_loss}")
-            if mean_loss < min_eval_loss:
+            if mean_loss < min_eval_loss and Baseline:
                 print("Saving model")
                 torch.save(model.state_dict(), save_model_path)
                 min_eval_loss = mean_loss
